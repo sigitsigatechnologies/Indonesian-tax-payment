@@ -1,0 +1,129 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+      connect-timeout: 2s
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+            - DedupeResponseHeader=X-Correlation-ID, RETAIN_FIRST
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowed-origin-patterns: "*"
+                allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+                allowed-headers: "*"
+                exposed-headers: [X-Correlation-ID]
+                allow-credentials: false
+                max-age: 3600
+          routes:
+            - id: payment-service
+              uri: ${PAYMENT_SERVICE_URI:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/tax/payments/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 50
+                    redis-rate-limiter.burstCapacity: 100
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@customerKeyResolver}"
+                - PreserveHostHeader
+            - id: billing-service
+              uri: ${BILLING_SERVICE_URI:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/tax/billings/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 100
+                    redis-rate-limiter.burstCapacity: 200
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@customerKeyResolver}"
+                - PreserveHostHeader
+            - id: core-banking-mock
+              uri: ${CORE_BANKING_URI:http://localhost:8084}
+              predicates:
+                - Path=/api/v1/accounts/**,/api/v1/transactions/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 100
+                    redis-rate-limiter.burstCapacity: 200
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@customerKeyResolver}"
+                - PreserveHostHeader
+            - id: tax-gateway-mock
+              uri: ${TAX_GATEWAY_URI:http://localhost:8085}
+              predicates:
+                - Path=/api/v1/government/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 100
+                    redis-rate-limiter.burstCapacity: 200
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@customerKeyResolver}"
+                - PreserveHostHeader
+            - id: reconciliation-service
+              uri: ${RECONCILIATION_SERVICE_URI:http://localhost:8086}
+              predicates:
+                - Path=/api/v1/reconciliation/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@customerKeyResolver}"
+                - PreserveHostHeader
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8087}
+              predicates:
+                - Path=/api/v1/notifications/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@customerKeyResolver}"
+                - PreserveHostHeader
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: api-gateway
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level %logger{36} - %msg%n"
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:local-development-secret-change-me-please-32bytes-min}

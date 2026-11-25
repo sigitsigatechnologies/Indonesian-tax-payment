@@ -1,0 +1,19 @@
+package id.co.taxpay.payment.domain.model;
+
+public enum PaymentStatus {
+    RECEIVED,
+    VALIDATING,
+    VALIDATED,
+    PENDING_APPROVAL,
+    APPROVED,
+    DEBIT_PENDING,
+    DEBIT_SUCCESS,
+    GOVERNMENT_SUBMISSION_PENDING,
+    GOVERNMENT_PROCESSING,
+    SUCCESS,
+    FAILED,
+    REVERSAL_PENDING,
+    REVERSED,
+    UNKNOWN,
+    EXPIRED
+}
